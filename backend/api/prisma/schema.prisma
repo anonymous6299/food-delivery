@@ -1,0 +1,714 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// 1. USERS & AUTHENTICATION
+// ==========================================
+
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  RESTAURANT_OWNER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  phone        String?       @unique
+  firstName    String
+  lastName     String
+  role         UserRole      @default(CUSTOMER)
+  status       UserStatus    @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  // Relations
+  addresses    UserAddress[]
+  wallet       Wallet?
+  sessions     UserSession[]
+  orders       Order[]       @relation("CustomerOrders")
+  reviews      Review[]      @relation("CustomerReviews")
+  favorites    UserFavorite[]
+  driverProfile Driver?
+  restaurantProfile Restaurant?
+  notifications Notification[]
+  pushTokens   PushToken[]
+  tickets      SupportTicket[]
+  messagesSent SupportMessage[]
+  chatMessages ChatMessage[]
+}
+
+model UserSession {
+  id           String   @id @default(uuid())
+  userId       String
+  token        String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserAddress {
+  id           String   @id @default(uuid())
+  userId       String
+  title        String   // Home, Work, Other
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  country      String
+  latitude     Float
+  longitude    Float
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders       Order[]
+}
+
+model Wallet {
+  id           String              @id @default(uuid())
+  userId       String              @unique
+  balance      Decimal             @default(0.00) @db.Decimal(10, 2)
+  currency     String              @default("USD")
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+}
+
+enum WalletTxType {
+  CREDIT
+  DEBIT
+}
+
+enum WalletTxStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model WalletTransaction {
+  id            String         @id @default(uuid())
+  walletId      String
+  amount        Decimal        @db.Decimal(10, 2)
+  type          WalletTxType
+  status        WalletTxStatus @default(SUCCESS)
+  description   String?
+  referenceId   String?        // OrderId, PaymentId, etc.
+  referenceType String?
+  createdAt     DateTime       @default(now())
+
+  wallet        Wallet         @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 2. RESTAURANTS
+// ==========================================
+
+enum RestaurantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+model Restaurant {
+  id               String                 @id @default(uuid())
+  ownerId          String                 @unique
+  name             String
+  description      String?
+  address          String
+  latitude         Float
+  longitude        Float
+  logoUrl          String?
+  coverImageUrl    String?
+  phoneNumber      String
+  rating           Float                  @default(0.0)
+  isFeatured       Boolean                @default(false)
+  status           RestaurantStatus       @default(PENDING)
+  deliveryRadiusKm Float                  @default(5.0)
+  minOrderAmount   Decimal                @default(0.00) @db.Decimal(10, 2)
+  baseDeliveryFee  Decimal                @default(0.00) @db.Decimal(10, 2)
+  commissionRate   Float                  @default(10.0) // Percentage
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  // Relations
+  owner            User                   @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  workingHours     RestaurantWorkingHours[]
+  taxes            RestaurantTax[]
+  deliveryZones    DeliveryZone[]
+  categories       Category[]
+  foodItems        FoodItem[]
+  orders           Order[]
+  reviews          Review[]
+}
+
+model RestaurantWorkingHours {
+  id           String     @id @default(uuid())
+  restaurantId String
+  dayOfWeek    Int        // 0 (Sunday) to 6 (Saturday)
+  openTime     String     // "HH:MM"
+  closeTime    String     // "HH:MM"
+  isOpen       Boolean    @default(true)
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, dayOfWeek])
+}
+
+model RestaurantTax {
+  id           String     @id @default(uuid())
+  restaurantId String
+  taxName      String
+  taxRate      Float      // Percentage
+  isInclusive  Boolean    @default(false)
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+model DeliveryZone {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  coordinates  Json       // GeoJSON format for zone shape (e.g. Polygon coordinates)
+  extraFee     Decimal    @default(0.00) @db.Decimal(10, 2)
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 3. MENU & FOOD ITEMS
+// ==========================================
+
+model Category {
+  id           String     @id @default(uuid())
+  restaurantId String
+  name         String
+  description  String?
+  iconUrl      String?
+  sortOrder    Int        @default(0)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  foodItems    FoodItem[]
+}
+
+model FoodItem {
+  id             String            @id @default(uuid())
+  categoryId     String
+  restaurantId   String
+  name           String
+  description    String?
+  price          Decimal           @db.Decimal(10, 2)
+  imageUrl       String?
+  isVeg          Boolean           @default(false)
+  isEgg          Boolean           @default(false)
+  isNonVeg       Boolean           @default(false)
+  isAvailable    Boolean           @default(true)
+  popularityScore Float            @default(0.0)
+  isFeatured     Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  // Relations
+  category       Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  restaurant     Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  variants       FoodItemVariant[]
+  addonGroups    AddonGroup[]
+  cartItems      CartItem[]
+  favorites      UserFavorite[]
+  orderItems     OrderItem[]
+}
+
+model FoodItemVariant {
+  id           String     @id @default(uuid())
+  foodItemId   String
+  name         String
+  price        Decimal    @db.Decimal(10, 2) // Total variant price or additional price
+  isAvailable  Boolean    @default(true)
+
+  foodItem     FoodItem   @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+}
+
+model AddonGroup {
+  id             String      @id @default(uuid())
+  foodItemId     String
+  name           String
+  minSelections  Int         @default(0)
+  maxSelections  Int         @default(1)
+  isRequired     Boolean     @default(false)
+
+  foodItem       FoodItem    @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+  items          AddonItem[]
+}
+
+model AddonItem {
+  id           String        @id @default(uuid())
+  addonGroupId String
+  name         String
+  price        Decimal       @db.Decimal(10, 2)
+  isAvailable  Boolean       @default(true)
+
+  addonGroup   AddonGroup    @relation(fields: [addonGroupId], references: [id], onDelete: Cascade)
+  cartAddons   CartItemAddon[]
+  orderAddons  OrderItemAddon[]
+}
+
+model UserFavorite {
+  id           String     @id @default(uuid())
+  userId       String
+  foodItemId   String
+  createdAt    DateTime   @default(now())
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  foodItem     FoodItem   @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, foodItemId])
+}
+
+// ==========================================
+// 4. PROMO BANNERS & COUPONS
+// ==========================================
+
+model PromoBanner {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  imageUrl    String
+  actionType  String    // RESTAURANT, FOOD_ITEM, EXTERNAL_LINK
+  actionId    String?   // Target ID
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+model Coupon {
+  id               String             @id @default(uuid())
+  code             String             @unique
+  description      String?
+  discountType     DiscountType
+  discountValue    Decimal            @db.Decimal(10, 2)
+  maxDiscountAmount Decimal?          @db.Decimal(10, 2)
+  minOrderValue    Decimal            @default(0.00) @db.Decimal(10, 2)
+  startDate        DateTime
+  endDate          DateTime
+  usageLimit       Int                @default(1)
+  usageCount       Int                @default(0)
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+
+  usages           UserCouponUsage[]
+}
+
+model UserCouponUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  couponId  String
+  orderId   String
+  usedAt    DateTime @default(now())
+
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
+}
+
+// ==========================================
+// 5. CART & ORDERS
+// ==========================================
+
+model CartItem {
+  id         String            @id @default(uuid())
+  userId     String
+  foodItemId String
+  variantId  String?
+  quantity   Int               @default(1)
+  notes      String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  foodItem   FoodItem          @relation(fields: [foodItemId], references: [id], onDelete: Cascade)
+  variant    FoodItemVariant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  addons     CartItemAddon[]
+}
+
+model CartItemAddon {
+  id         String    @id @default(uuid())
+  cartItemId String
+  addonItemId String
+
+  cartItem   CartItem  @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  addonItem  AddonItem @relation(fields: [addonItemId], references: [id], onDelete: Cascade)
+
+  @@unique([cartItemId, addonItemId])
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  READY_FOR_PICKUP
+  PICKED_UP
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  CASH
+  WALLET
+  UPI
+}
+
+model Order {
+  id                  String             @id @default(uuid())
+  customerId          String
+  restaurantId        String
+  driverId            String?
+  addressId           String
+  couponCode          String?
+  status              OrderStatus        @default(PENDING)
+  subtotal            Decimal            @db.Decimal(10, 2)
+  discountAmount      Decimal            @default(0.00) @db.Decimal(10, 2)
+  deliveryFee         Decimal            @db.Decimal(10, 2)
+  taxAmount           Decimal            @db.Decimal(10, 2)
+  totalAmount         Decimal            @db.Decimal(10, 2)
+  paymentStatus       PaymentStatus      @default(PENDING)
+  paymentMethod       PaymentMethod
+  deliveryInstructions String?
+  orderNotes          String?
+  scheduledFor        DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  customer            User               @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+  restaurant          Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Restrict)
+  driver              Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  address             UserAddress        @relation(fields: [addressId], references: [id], onDelete: Restrict)
+  items               OrderItem[]
+  statusHistory       OrderStatusHistory[]
+  payments            Payment[]
+  reviews             Review[]
+  tracking            DeliveryTracking?
+  chatRooms           ChatRoom[]
+}
+
+model OrderItem {
+  id             String            @id @default(uuid())
+  orderId        String
+  foodItemId     String
+  variantId      String?
+  name           String
+  price          Decimal           @db.Decimal(10, 2)
+  quantity       Int
+  totalPrice     Decimal           @db.Decimal(10, 2)
+
+  order          Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  foodItem       FoodItem          @relation(fields: [foodItemId], references: [id], onDelete: Restrict)
+  variant        FoodItemVariant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  addons         OrderItemAddon[]
+}
+
+model OrderItemAddon {
+  id           String     @id @default(uuid())
+  orderItemId  String
+  addonItemId  String
+  name         String
+  price        Decimal    @db.Decimal(10, 2)
+
+  orderItem    OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  addonItem    AddonItem  @relation(fields: [addonItemId], references: [id], onDelete: Restrict)
+}
+
+model OrderStatusHistory {
+  id          String      @id @default(uuid())
+  orderId     String
+  status      OrderStatus
+  note        String?
+  changedBy   String      // CUSTOMER, DRIVER, RESTAURANT, ADMIN, SYSTEM
+  createdAt   DateTime    @default(now())
+
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 6. DRIVERS & EARNINGS
+// ==========================================
+
+enum VehicleType {
+  BICYCLE
+  MOTORCYCLE
+  CAR
+}
+
+enum DriverStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+model Driver {
+  id                 String       @id @default(uuid())
+  userId             String       @unique
+  vehicleType        VehicleType
+  licenseNumber      String
+  vehiclePlateNumber String
+  isOnline           Boolean      @default(false)
+  status             DriverStatus @default(PENDING)
+  rating             Float        @default(0.0)
+  currentLatitude    Float?
+  currentLongitude   Float?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  // Relations
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders             Order[]
+  earnings           DriverEarning[]
+  shifts             DriverShift[]
+  tracking           DeliveryTracking[]
+  reviews            Review[]
+}
+
+model DriverEarning {
+  id           String     @id @default(uuid())
+  driverId     String
+  orderId      String
+  amount       Decimal    @db.Decimal(10, 2)
+  tipAmount    Decimal    @default(0.00) @db.Decimal(10, 2)
+  status       String     @default("PENDING") // PENDING, PAID
+  paidAt       DateTime?
+  createdAt    DateTime   @default(now())
+
+  driver       Driver     @relation(fields: [driverId], references: [id], onDelete: Restrict)
+}
+
+model DriverShift {
+  id           String     @id @default(uuid())
+  driverId     String
+  startTime    DateTime
+  endTime      DateTime?
+  status       String     // ACTIVE, COMPLETED
+
+  driver       Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 7. PAYMENTS & REFUNDS
+// ==========================================
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String
+  paymentGateway String        // STRIPE, WALLET, RAZORPAY, COD
+  transactionId  String        @unique
+  amount         Decimal       @db.Decimal(10, 2)
+  status         String        // PENDING, SUCCESS, FAILED
+  rawResponse    Json?
+  createdAt      DateTime      @default(now())
+
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds        Refund[]
+}
+
+model Refund {
+  id           String     @id @default(uuid())
+  paymentId    String
+  amount       Decimal    @db.Decimal(10, 2)
+  reason       String?
+  status       String     // PENDING, SUCCESS, FAILED
+  createdAt    DateTime   @default(now())
+
+  payment      Payment    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+}
+
+// ==========================================
+// 8. DELIVERY TRACKING
+// ==========================================
+
+model DeliveryTracking {
+  id           String     @id @default(uuid())
+  orderId      String     @unique
+  driverId     String
+  latitude     Float
+  longitude    Float
+  bearing      Float?     // Direction angle
+  speed        Float?
+  updatedAt    DateTime   @updatedAt
+
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver     @relation(fields: [driverId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 9. REVIEWS & RATINGS
+// ==========================================
+
+model Review {
+  id             String      @id @default(uuid())
+  orderId        String
+  customerId     String
+  restaurantId   String?
+  driverId       String?
+  restaurantRating Int?
+  driverRating     Int?
+  foodRating       Int?
+  comment        String?
+  reply          String?
+  createdAt      DateTime    @default(now())
+
+  order          Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer       User        @relation("CustomerReviews", fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant     Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
+  driver         Driver?     @relation(fields: [driverId], references: [id], onDelete: SetNull)
+}
+
+// ==========================================
+// 10. CHAT SYSTEM
+// ==========================================
+
+enum ChatRoomType {
+  CUSTOMER_DRIVER
+  CUSTOMER_RESTAURANT
+  DRIVER_RESTAURANT
+}
+
+model ChatRoom {
+  id           String       @id @default(uuid())
+  orderId      String
+  type         ChatRoomType
+  createdAt    DateTime     @default(now())
+
+  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  messages     ChatMessage[]
+}
+
+model ChatMessage {
+  id           String     @id @default(uuid())
+  chatRoomId   String
+  senderId     String
+  message      String
+  messageType  String     @default("TEXT") // TEXT, IMAGE
+  isRead       Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  chatRoom     ChatRoom   @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  sender       User       @relation(fields: [senderId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 11. NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  body        String
+  type        String   // ORDER_STATUS, PROMO, CHAT, SYSTEM
+  data        Json?    // Navigation payload or extra metadata
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PushToken {
+  id          String   @id @default(uuid())
+  userId      String
+  token       String   @unique
+  deviceType  String   // IOS, ANDROID, WEB
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// 12. SYSTEM CONFIGURATION & SUPPORT
+// ==========================================
+
+model SystemSettings {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model AppVersion {
+  id             String   @id @default(uuid())
+  platform       String   // IOS, ANDROID
+  minVersion     String   // Minimum version needed
+  currentVersion String
+  forceUpdate    Boolean  @default(false)
+  updatedAt      DateTime @updatedAt
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id          String         @id @default(uuid())
+  userId      String
+  subject     String
+  description String
+  status      TicketStatus   @default(OPEN)
+  priority    String         @default("MEDIUM") // LOW, MEDIUM, HIGH
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    SupportMessage[]
+}
+
+model SupportMessage {
+  id           String        @id @default(uuid())
+  ticketId     String
+  senderId     String
+  message      String
+  createdAt    DateTime      @default(now())
+
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender       User          @relation(fields: [senderId], references: [id], onDelete: Cascade)
+}
