@@ -153,6 +153,7 @@ import {
   View,
   Dimensions,
   ImageBackground,
+  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import COLORS from '../../constants/colors';
@@ -167,21 +168,21 @@ const { width } = Dimensions.get('window');
 
 const SLIDES = [
   {
-    image:Bg1,
+    image: Bg1,
     emoji: '🍕',
     title: 'All Your Favorites',
     description:
       'Order from the best local restaurants with easy, on-demand delivery.',
   },
   {
-    image:Bg2,
+    image: Bg2,
     emoji: '📍',
     title: 'Real-Time Tracking',
     description:
       'Follow your food with real-time updates from kitchen to doorstep.',
   },
   {
-    image:Bg3,
+    image: Bg3,
     emoji: '💳',
     title: 'Easy Payments',
     description:
@@ -205,14 +206,19 @@ export const Onboarding: React.FC = () => {
 
   return (
     <SafeView
-        style={[styles.container, { backgroundColor: 'transparent' }]}
-        edges={['bottom']}
-      >
-    <ImageBackground
-      source={SLIDES[currentSlide].image}
-      style={styles.background}
-      resizeMode="cover"
+      style={[styles.container, { backgroundColor: 'transparent' }]}
+      edges={['bottom']}
     >
+      <StatusBar
+              translucent
+              backgroundColor="transparent"
+              barStyle="light-content"
+            />
+      <ImageBackground
+        source={SLIDES[currentSlide].image}
+        style={styles.background}
+        resizeMode="cover"
+      >
         <View style={styles.skipRow}>
           <Button
             title="Skip"
@@ -263,7 +269,7 @@ export const Onboarding: React.FC = () => {
           />
         </View>
       </ImageBackground>
-      </SafeView>
+    </SafeView>
   );
 };
 
@@ -279,7 +285,7 @@ const styles = StyleSheet.create({
   skipRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingVertical: 16,
+    paddingTop: 36,
     paddingHorizontal: 16,
   },
   slideContainer: {
