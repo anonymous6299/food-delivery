@@ -1,3 +1,5 @@
+// imports
+
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -11,6 +13,8 @@ import SafeView from '../../components/common/SafeView';
 import Header from '../../components/common/Header';
 import useAuthStore from '../../store/useAuthStore';
 
+
+// zod schema for validation of phone number
 const schema = zod.object({
   phone: zod
     .string()
@@ -19,9 +23,14 @@ const schema = zod.object({
     .regex(/^\+?[1-9]\d{1,14}$/, 'Invalid phone number format. E.g. +1234567890'),
 });
 
+// creating "FormData" type through zod 
 type FormData = zod.infer<typeof schema>;
 
+
+// component
 export const Login: React.FC = () => {
+
+  // hooks and inits
   const navigation = useNavigation<any>();
   const { login } = useAuthStore();
   const {
@@ -35,20 +44,27 @@ export const Login: React.FC = () => {
     },
   });
 
+
+  // invoked upon phone number form submission
   const onSubmit = async (data: FormData) => {
     await login(data.phone);
     navigation.navigate('OTP', { phone: data.phone });
   };
 
   return (
+
     <SafeView style={styles.container} edges={['top', 'bottom']}>
+      {/* header */}
       <Header showBackButton={false} transparent />
+
+      {/* intro text */}
       <View style={styles.content}>
         <Text style={styles.welcomeText}>What's your mobile number?</Text>
         <Text style={styles.subtext}>
           We'll send a text to verify your phone number.
         </Text>
 
+        {/* input for phone number */}
         <Controller
           control={control}
           name="phone"
@@ -65,6 +81,7 @@ export const Login: React.FC = () => {
           )}
         />
 
+        {/* continue button */}
         <Button
           title="Continue"
           onPress={handleSubmit(onSubmit)}
@@ -75,6 +92,8 @@ export const Login: React.FC = () => {
   );
 };
 
+
+// styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -103,4 +122,6 @@ const styles = StyleSheet.create({
   },
 });
 
+
+// exports
 export default Login;

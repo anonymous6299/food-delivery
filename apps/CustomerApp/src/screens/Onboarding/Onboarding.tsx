@@ -360,4 +360,6 @@ const styles = StyleSheet.create({
   },
 });
 
+
+// exports
 export default Onboarding;

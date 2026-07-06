@@ -11,8 +11,10 @@ import Header from '../../components/common/Header';
 import useAuthStore from '../../store/useAuthStore';
 
 
-
+// component
 export const OTP: React.FC = () => {
+
+  // hooks and inits
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const phone = route.params?.phone || 'your phone';
@@ -22,6 +24,7 @@ export const OTP: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // fn to verify otp handling. if otp entered is less than 4 chars or incorrect (for now 1234 is correct hard-coded otp) it notifies the user and asks for appropriate otp. 
   const handleVerify = async () => {
     if (otp.length < 4) {
       setError('Please enter a valid 4-digit code');
@@ -30,7 +33,7 @@ export const OTP: React.FC = () => {
 
     setLoading(true);
     setError('');
-    
+
     // Simulate verification (Accepts 1234 or 123456)
     const success = await verifyOtp(otp);
     setLoading(false);
@@ -46,7 +49,10 @@ export const OTP: React.FC = () => {
   };
 
   return (
+
     <SafeView style={styles.container}>
+
+      {/*  */}
       <Header title="Verification" />
       <View style={styles.content}>
         <Text style={styles.title}>Enter the 4-digit code sent to</Text>
@@ -78,7 +84,7 @@ export const OTP: React.FC = () => {
           variant="text"
           onPress={() => console.log('Resending OTP')}
           style={styles.resendBtn}
-          textStyle={{color:"#8A8A8A"}}
+          textStyle={{ color: "#8A8A8A" }}
         />
       </View>
     </SafeView>
